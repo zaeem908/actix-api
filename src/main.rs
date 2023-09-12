@@ -98,7 +98,7 @@ async fn create_user(user_data: actix_web::web::Json<UserDataStruct>, data: Data
         }
     }
 }
-
+ 
 
 async fn hello() -> HttpResponse {
     HttpResponse::Ok().body("Hello, World!")
