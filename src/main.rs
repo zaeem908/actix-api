@@ -95,7 +95,7 @@ async fn create_user(user_data: actix_web::web::Json<UserDataStruct>, data: Data
         Err(err) => {
             eprintln!("Database error: {:?}", err);
             HttpResponse::InternalServerError().json("Internal Server Error")
-        }
+        } 
     }
 }
  
