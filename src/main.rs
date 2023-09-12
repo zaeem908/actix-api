@@ -5,7 +5,7 @@ use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use regex::Regex;
 
 pub struct AppState {
-    db: Pool<Postgres>,
+    db: Pool<Postgres>, 
 }
 
 #[derive(Deserialize)]
