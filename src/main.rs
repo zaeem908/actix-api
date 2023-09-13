@@ -3,6 +3,8 @@ use dotenv::dotenv;
 use serde::Deserialize;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use regex::Regex;
+use bcrypt::{hash, verify, DEFAULT_COST};
+
 
 pub struct AppState {
     db: Pool<Postgres>, 
@@ -16,6 +18,16 @@ pub struct UserDataStruct {
   password:String
 }
 
+#[derive(Deserialize)]
+
+pub struct LoginStruct {
+    email:String,
+    password:String
+}
+
+pub fn hash_password(pwd:&str) -> Result<String, bcrypt::BcryptError> {
+       hash(pwd, DEFAULT_COST)
+}
 impl UserDataStruct {
     fn is_valid_email(&self) -> bool {
         let re = Regex::new(r"^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$").unwrap();
@@ -43,6 +55,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(Data::new(AppState { db: pool.clone() }))
             .route("/users", actix_web::web::get().to(fetch_users))
             .route("/create-user", actix_web::web::post().to(create_user))
+            .route("/login", actix_web::web::post().to(login))
             .route("/", actix_web::web::get().to(hello))
     })
     .bind(("127.0.0.1", 8080))?
@@ -64,6 +77,33 @@ async fn fetch_users(data: Data<AppState>) -> HttpResponse {
     }
 }
 
+
+async fn login(user_data: actix_web::web::Json<LoginStruct>, data:Data<AppState>) -> HttpResponse {
+    let email = &user_data.email;
+    let password = &user_data.password;
+    let query_result = sqlx::query_as::<_, (String, String)>("SELECT email,password from users WHERE email = $1")
+        .bind(email)
+        .fetch_optional(&data.db)
+        .await;
+
+    match query_result {
+        Ok(Some((stored_email, stored_password))) => {
+            if bcrypt::verify(password, &stored_password).unwrap_or(false) {
+                  HttpResponse::Ok().json("user logged in")
+            }else {
+                HttpResponse::Unauthorized().json("Invalid credentials")
+            }
+        }
+        Ok(none) => {
+            HttpResponse::Unauthorized().json("no user found with that email!")
+        }
+        Err(err) => {
+            eprintln!("error: {:?}", err);
+            HttpResponse::InternalServerError().json("Internal Server Error")
+        }
+    }
+}
+
 async fn create_user(user_data: actix_web::web::Json<UserDataStruct>, data: Data<AppState>) -> HttpResponse {
     let username = &user_data.username;
     let email = &user_data.email;
@@ -75,13 +115,15 @@ async fn create_user(user_data: actix_web::web::Json<UserDataStruct>, data: Data
     if !user_data.is_valid_password() {
         return HttpResponse::BadRequest().json("invalid password")
     }
+
+    let hashed_password = hash_password(password).unwrap();
     
     let query_result = sqlx::query(
         "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)"
     )
     .bind(username)
     .bind(email)
-    .bind(password)
+    .bind(hashed_password)
     .execute(&data.db)
     .await;
 
