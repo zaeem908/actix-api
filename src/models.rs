@@ -1,5 +1,4 @@
 use serde::Serialize;
-// models.rs
 use sqlx::FromRow;
 
 #[derive(Debug, FromRow, Serialize)]
