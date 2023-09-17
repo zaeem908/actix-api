@@ -88,21 +88,20 @@ pub async fn login(user_data: actix_web::web::Json<LoginStruct>, data: Data<AppS
     }
 }
 
-pub async fn create_user(user_data: UserDataStruct, data: &Data<AppState>) -> Result<(), HttpResponse> {
+pub async fn create_user(user_data: UserDataStruct, data: &Data<AppState>) -> Result<(), String> {
     if !user_data.is_valid_email() {
-        return Err(HttpResponse::BadRequest().json("Invalid email"));
+        return Err("invalid email".to_string());
     }
     if !user_data.is_valid_password() {
-        return Err(HttpResponse::BadRequest().json("Invalid password"));
+        return Err("invalid password".to_string());
     }
 
     let hashed_password = match hash_password(&user_data.password) {
         Ok(hashed) => hashed,
         Err(_) => {
-            return Err(HttpResponse::InternalServerError().json("Internal Server Error"));
+            return Err("Internal Server Error".to_string());
         }
     };
-
 
     if let Err(_) = sqlx::query!(
         "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
@@ -113,7 +112,7 @@ pub async fn create_user(user_data: UserDataStruct, data: &Data<AppState>) -> Re
     .execute(&data.db)
     .await
     {
-        return Err(HttpResponse::InternalServerError().json("duplicate credentials!"));
+        return Err("detected duplicate data! try again".to_string());
     }
 
     Ok(())
