@@ -1,15 +1,22 @@
+use actix_web::App;
 use actix_web::{web::Data, HttpResponse};
-use jsonwebtoken::{encode, EncodingKey, Header};
+use jsonwebtoken::{encode, Header, EncodingKey};
 use serde::{Deserialize, Serialize};
 
-use crate::auth::{hash_password, UserDataStruct};
 use crate::db::AppState;
+use crate::auth::{UserDataStruct, hash_password};
 use crate::models::Users;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginStruct {
     pub email: String,
     pub password: String,
+}
+
+#[derive(Debug)]
+pub enum LoginResult {
+    Success(String),
+    Error(String)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,25 +26,8 @@ pub struct Claims {
 
 pub struct UserController;
 
-impl UserController {
-    pub async fn fetch_users(data: Data<AppState>) -> HttpResponse {
-        let query_result = sqlx::query_as!(Users, "SELECT * FROM users")
-            .fetch_all(&data.db)
-            .await;
-
-        match query_result {
-            Ok(Users) => HttpResponse::Ok().json(Users),
-            Err(err) => {
-                eprintln!("Database error: {:?}", err);
-                HttpResponse::InternalServerError().json("Internal Server Error")
-            }
-        }
-    }
-
-    pub async fn login(
-        user_data: actix_web::web::Json<LoginStruct>,
-        data: Data<AppState>,
-    ) -> HttpResponse {
+impl LoginStruct {
+    pub async fn login(user_data: &Self, data: &AppState) -> LoginResult {
         let query_result = sqlx::query_as::<_, (String, String, String)>(
             "SELECT username, email, password FROM users WHERE email = $1",
         )
@@ -53,7 +43,7 @@ impl UserController {
                 );
 
                 if bcrypt::verify(&user_data.password, &stored_password).unwrap_or(false) {
-                    let secret_key = std::env::var("SECRET_KEY").expect("SECTET_KEY must be set");
+                    let secret_key = std::env::var("SECRET_KEY").expect("SECRET_KEY must be set");
 
                     let token = encode(
                         &Header::default(),
@@ -62,70 +52,102 @@ impl UserController {
                         },
                         &EncodingKey::from_secret(secret_key.as_ref()),
                     );
-                    println!("Generated token: {:?}", token);
-                    println!("user {} is logged in succesfully", stored_username);
-                    HttpResponse::Ok().json("succesfully logged in!")
+
+                    if let Ok(token) = token {
+                        println!("User {} is logged in successfully", stored_username);
+                        LoginResult::Success(token.to_string())
+                    } else {
+                        LoginResult::Error("Failed to generate token".to_string())
+                    }
                 } else {
-                    HttpResponse::Unauthorized().json("Invalid credentials")
+                    LoginResult::Error("Invalid credentials".to_string())
                 }
             }
-            Ok(None) => HttpResponse::Unauthorized().json("No user found with that email!"),
+            Ok(None) => LoginResult::Error("No user found with that email!".to_string()),
             Err(err) => {
                 eprintln!("Error: {:?}", err);
-                HttpResponse::InternalServerError().json("Internal Server Error")
+                LoginResult::Error("Internal Server Error".to_string())
             }
         }
     }
+}
 
-    pub async fn create_user_route(
-        user_data: actix_web::web::Json<UserDataStruct>,
-        data: Data<AppState>,
-    ) -> HttpResponse {
-        let result = UserController::create_user(user_data.into_inner(), &data).await;
 
-        match result {
-            Ok(_) => HttpResponse::Ok().body("User created successfully"),
-            Err(err) => {
-                eprintln!("Database error: {:?}", err);
-                HttpResponse::InternalServerError().json("Internal Server Error")
-            }
+impl UserController {
+
+    pub async fn login_route(user_data: LoginStruct, db:&Data<AppState>) -> HttpResponse {
+        
+    let result = LoginStruct::login(&user_data, &db).await;
+
+    match result {
+        LoginResult::Success(token) => HttpResponse::Ok().body(token),
+        LoginResult::Error(err) => {
+            eprintln!("Database error: {:?}", err);
+            HttpResponse::InternalServerError().json("Internal Server Error")
+        } 
+    }
+    }
+pub async fn fetch_users(data: Data<AppState>) -> HttpResponse {
+    let query_result = sqlx::query_as!(Users, "SELECT * FROM users")
+        .fetch_all(&data.db)
+        .await;
+
+    match query_result {
+        Ok(Users) => HttpResponse::Ok().json(Users),
+        Err(err) => {
+            eprintln!("Database error: {:?}", err);
+            HttpResponse::InternalServerError().json("Internal Server Error")
         }
     }
+}
 
-    pub async fn create_user(
-        user_data: UserDataStruct,
-        data: &Data<AppState>,
-    ) -> Result<(), String> {
-        if !user_data.is_valid_email() {
-            return Err("invalid email".to_string());
-        }
-        if !user_data.is_valid_password() {
-            return Err("invalid password".to_string());
-        }
 
-        let hashed_password = match hash_password(&user_data.password) {
-            Ok(hashed) => hashed,
-            Err(_) => {
-                return Err("Internal Server Error".to_string());
-            }
-        };
+ pub async fn create_user_route(user_data: actix_web::web::Json<UserDataStruct>, data: Data<AppState>) -> HttpResponse {
 
-        if let Err(_) = sqlx::query!(
-            "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
-            &user_data.username,
-            &user_data.email,
-            &hashed_password
-        )
-        .execute(&data.db)
-        .await
-        {
-            return Err("detected duplicate data! try again".to_string());
-        }
+    let result = UserController::create_user(user_data.into_inner(), &data).await;
 
-        Ok(())
+    match result {
+        Ok(_) => HttpResponse::Ok().body("User created successfully"),
+        Err(err) => {
+            eprintln!("Database error: {:?}", err);
+            HttpResponse::InternalServerError().json("Internal Server Error")
+        } 
+    }
+}
+
+pub async fn create_user(user_data: UserDataStruct, data: &Data<AppState>) -> Result<(), String> {
+    if !user_data.is_valid_email() {
+        return Err("invalid email".to_string());
+    }
+    if !user_data.is_valid_password() {
+        return Err("invalid password".to_string());
     }
 
-    pub async fn hello() -> HttpResponse {
-        HttpResponse::Ok().body("Hello, World!")
+    let hashed_password = match hash_password(&user_data.password) {
+        Ok(hashed) => hashed,
+        Err(_) => {
+            return Err("Internal Server Error".to_string());
+        }
+    };
+
+    if let Err(_) = sqlx::query!(
+        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
+        &user_data.username,
+        &user_data.email,
+        &hashed_password
+    )
+    .execute(&data.db)
+    .await
+    {
+        return Err("detected duplicate data! try again".to_string());
     }
+
+    Ok(())
+}
+
+
+
+pub async fn hello() -> HttpResponse {
+    HttpResponse::Ok().body("Hello, World!")
+}
 }
