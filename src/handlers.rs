@@ -1,23 +1,20 @@
-use actix_web::App;
 use actix_web::{web::Data, HttpResponse};
 use jsonwebtoken::{encode, Header, EncodingKey};
 use serde::{Deserialize, Serialize};
-
+use crate::error::AppError;
 use crate::db::AppState;
 use crate::auth::{UserDataStruct, hash_password};
 use crate::models::Users;
 
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginStruct {
+    pub username: String,
     pub email: String,
-    pub password: String,
+    pub password: String
 }
 
-#[derive(Debug)]
-pub enum LoginResult {
-    Success(String),
-    Error(String)
-}
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -27,22 +24,22 @@ pub struct Claims {
 pub struct UserController;
 
 impl LoginStruct {
-    pub async fn login(user_data: &Self, data: &AppState) -> LoginResult {
-        let query_result = sqlx::query_as::<_, (String, String, String)>(
+    pub async fn login(user_data: &Self, data: &Data<AppState>) -> Result<String, AppError> {
+        let query_result = sqlx::query!(
             "SELECT username, email, password FROM users WHERE email = $1",
+            &user_data.email
         )
-        .bind(&user_data.email)
         .fetch_optional(&data.db)
         .await;
 
         match query_result {
-            Ok(Some((stored_username, stored_email, stored_password))) => {
+            Ok(Some(row)) => {
                 println!(
                     "Found user with email: {}, stored password: {}",
-                    stored_email, stored_password
+                    row.email, row.password
                 );
 
-                if bcrypt::verify(&user_data.password, &stored_password).unwrap_or(false) {
+                if bcrypt::verify(&user_data.password, &row.password).unwrap_or(false) {
                     let secret_key = std::env::var("SECRET_KEY").expect("SECRET_KEY must be set");
 
                     let token = encode(
@@ -54,23 +51,24 @@ impl LoginStruct {
                     );
 
                     if let Ok(token) = token {
-                        println!("User {} is logged in successfully", stored_username);
-                        LoginResult::Success(token.to_string())
+                        println!("User {} is logged in successfully", row.username);
+                        Ok(token)
                     } else {
-                        LoginResult::Error("Failed to generate token".to_string())
+                        Err(AppError::InternalServerError)
                     }
                 } else {
-                    LoginResult::Error("Invalid credentials".to_string())
+                    Err(AppError::InvalidCredentials("invalid credentials".to_string()))
                 }
             }
-            Ok(None) => LoginResult::Error("No user found with that email!".to_string()),
+            Ok(None) => Err(AppError::InvalidEmail("No user found with that email!".to_string())),
             Err(err) => {
                 eprintln!("Error: {:?}", err);
-                LoginResult::Error("Internal Server Error".to_string())
+                Err(AppError::InternalServerError)
             }
         }
     }
 }
+
 
 
 impl UserController {
@@ -80,8 +78,8 @@ impl UserController {
     let result = LoginStruct::login(&user_data, &db).await;
 
     match result {
-        LoginResult::Success(token) => HttpResponse::Ok().body(token),
-        LoginResult::Error(err) => {
+        Ok(token) => HttpResponse::Ok().body(token),
+        Err(err) => {
             eprintln!("Database error: {:?}", err);
             HttpResponse::InternalServerError().json("Internal Server Error")
         } 
