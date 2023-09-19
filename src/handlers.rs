@@ -77,16 +77,26 @@ impl UserController {
             }
         }
     }
-    pub async fn fetch_users(data: Data<AppState>) -> HttpResponse {
+    pub async fn fetch_users(data: Data<AppState>) -> Result<Vec<Users>, String> {
         let query_result = sqlx::query_as!(Users, "SELECT * FROM users")
             .fetch_all(&data.db)
             .await;
 
         match query_result {
-            Ok(Users) => HttpResponse::Ok().json(Users),
+            Ok(Users) => Ok(Users),
             Err(err) => {
                 eprintln!("Database error: {:?}", err);
-                HttpResponse::InternalServerError().json("Internal Server Error")
+                Err("Internal Server Error".to_string())
+            }
+        }
+    }
+
+    pub async fn fetch_users_route(data: Data<AppState>) -> HttpResponse {
+        match UserController::fetch_users(data).await {
+            Ok(x) => HttpResponse::Ok().json(x),
+            Err(err_msg) => {
+                println!("error : {:?}", err_msg);
+                HttpResponse::InternalServerError().json("failed to fetch users")
             }
         }
     }
