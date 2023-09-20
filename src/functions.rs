@@ -17,7 +17,11 @@ pub struct Claims {
     pub sub: String,
 }
 
-pub struct UserController;
+pub struct UserController {
+    pub username: String,
+    pub email: String,
+    pub password: String,
+}
 
 impl LoginStruct {
     pub async fn login(user_data: &LoginStruct, data: Data<AppState>) -> Result<String, AppError> {
@@ -63,20 +67,6 @@ impl LoginStruct {
 }
 
 impl UserController {
-    pub async fn login_route(
-        user_data: actix_web::web::Json<LoginStruct>,
-        db: Data<AppState>,
-    ) -> HttpResponse {
-        let result = LoginStruct::login(&user_data, db).await;
-
-        match result {
-            Ok(token) => HttpResponse::Ok().json(token),
-            Err(err) => {
-                eprintln!("Database error: {:?}", err);
-                HttpResponse::InternalServerError().json("Internal Server Error")
-            }
-        }
-    }
     pub async fn fetch_users(data: Data<AppState>) -> Result<Vec<Users>, String> {
         let query_result = sqlx::query_as!(Users, "SELECT * FROM users")
             .fetch_all(&data.db)
@@ -87,31 +77,6 @@ impl UserController {
             Err(err) => {
                 eprintln!("Database error: {:?}", err);
                 Err("Internal Server Error".to_string())
-            }
-        }
-    }
-
-    pub async fn fetch_users_route(data: Data<AppState>) -> HttpResponse {
-        match UserController::fetch_users(data).await {
-            Ok(x) => HttpResponse::Ok().json(x),
-            Err(err_msg) => {
-                println!("error : {:?}", err_msg);
-                HttpResponse::InternalServerError().json("failed to fetch users")
-            }
-        }
-    }
-
-    pub async fn create_user_route(
-        user_data: actix_web::web::Json<UserDataStruct>,
-        data: Data<AppState>,
-    ) -> HttpResponse {
-        let result = UserController::create_user(user_data.into_inner(), &data).await;
-
-        match result {
-            Ok(_) => HttpResponse::Ok().body("User created successfully"),
-            Err(err) => {
-                eprintln!("Database error: {:?}", err);
-                HttpResponse::InternalServerError().json("Internal Server Error")
             }
         }
     }

@@ -3,11 +3,11 @@ use dotenv::dotenv;
 mod auth;
 mod db;
 mod error;
-mod handlers;
+mod functions;
 mod models;
-mod routes;
+mod routing;
 use db::{create_pool, AppState};
-use routes::configure_routes;
+use routing::configure_routes;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
