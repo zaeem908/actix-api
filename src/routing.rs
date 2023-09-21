@@ -6,7 +6,7 @@ use actix_web::web::Data;
 use actix_web::HttpResponse;
 
 pub async fn login_handler(form: web::Json<LoginForm>, state: Data<AppState>) -> HttpResponse {
-    let db = &state.db;
+    let db = &state.db; // extracted pg pool from appstate
     let result = form.login(&db).await;
 
     match result {
