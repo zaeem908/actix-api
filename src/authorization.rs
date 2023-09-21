@@ -2,45 +2,40 @@ use crate::auth::{hash_password, UserDataStruct};
 use crate::db::AppState;
 use crate::error::AppError;
 use crate::models::Users;
-use actix_web::{web::Data, HttpResponse};
+use actix_web::web::Data;
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LoginStruct {
-    pub email: String,
-    pub password: String,
-}
+use sqlx::{Pool, Postgres};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,
 }
 
-pub struct UserController {
-    pub username: String,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoginForm {
     pub email: String,
     pub password: String,
 }
 
-impl LoginStruct {
-    pub async fn login(user_data: &LoginStruct, data: Data<AppState>) -> Result<String, AppError> {
+impl LoginForm {
+    pub async fn login(&self, db: &Pool<Postgres>) -> Result<String, AppError> {
         let query_result = sqlx::query!(
             "SELECT username, email, password FROM users WHERE email = $1",
-            &user_data.email
+            &self.email
         )
-        .fetch_optional(&data.db)
+        .fetch_optional(db)
         .await;
 
         match query_result {
             Ok(Some(row)) => {
-                if bcrypt::verify(&user_data.password, &row.password).unwrap_or(false) {
+                if bcrypt::verify(&self.password, &row.password).unwrap_or(false) {
                     let secret_key = std::env::var("SECRET_KEY").expect("SECRET_KEY must be set");
 
                     let token = encode(
                         &Header::default(),
                         &Claims {
-                            sub: user_data.email.to_string(),
+                            sub: self.email.to_string(),
                         },
                         &EncodingKey::from_secret(secret_key.as_ref()),
                     );
@@ -64,6 +59,12 @@ impl LoginStruct {
             }
         }
     }
+}
+
+pub struct UserController {
+    pub username: String,
+    pub email: String,
+    pub password: String,
 }
 
 impl UserController {
@@ -112,9 +113,5 @@ impl UserController {
         }
 
         Ok(())
-    }
-
-    pub async fn hello() -> HttpResponse {
-        HttpResponse::Ok().body("Hello, World!")
     }
 }

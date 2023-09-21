@@ -1,11 +1,12 @@
 use actix_web::{App, HttpServer};
 use dotenv::dotenv;
 mod auth;
+mod authorization;
 mod db;
 mod error;
-mod functions;
 mod models;
 mod routing;
+
 use db::{create_pool, AppState};
 use routing::configure_routes;
 

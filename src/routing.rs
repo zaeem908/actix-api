@@ -1,15 +1,13 @@
 use crate::auth::UserDataStruct;
+use crate::authorization::{LoginForm, UserController};
 use crate::db::AppState;
-use crate::functions::{LoginStruct, UserController};
 use actix_web::web;
 use actix_web::web::Data;
 use actix_web::HttpResponse;
 
-pub async fn login_route(
-    user_data: actix_web::web::Json<LoginStruct>,
-    db: Data<AppState>,
-) -> HttpResponse {
-    let result = LoginStruct::login(&user_data, db).await;
+pub async fn login_handler(form: web::Json<LoginForm>, state: Data<AppState>) -> HttpResponse {
+    let db = &state.db;
+    let result = form.login(&db).await;
 
     match result {
         Ok(token) => HttpResponse::Ok().json(token),
@@ -20,7 +18,7 @@ pub async fn login_route(
     }
 }
 
-pub async fn fetch_users_route(data: Data<AppState>) -> HttpResponse {
+pub async fn fetch_users_handler(data: Data<AppState>) -> HttpResponse {
     match UserController::fetch_users(data).await {
         Ok(x) => HttpResponse::Ok().json(x),
         Err(err_msg) => {
@@ -30,7 +28,7 @@ pub async fn fetch_users_route(data: Data<AppState>) -> HttpResponse {
     }
 }
 
-pub async fn create_user_route(
+pub async fn create_user_handler(
     user_data: actix_web::web::Json<UserDataStruct>,
     data: Data<AppState>,
 ) -> HttpResponse {
@@ -46,8 +44,10 @@ pub async fn create_user_route(
 }
 
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
-    cfg.route("/users", web::get().to(fetch_users_route))
-        .route("/create-user", web::post().to(create_user_route))
-        .route("/login", web::post().to(login_route))
-        .route("/", web::get().to(UserController::hello));
+    cfg.service(
+        web::scope("/users")
+            .route("/", web::get().to(fetch_users_handler))
+            .route("/", web::post().to(create_user_handler))
+            .route("/login", web::post().to(login_handler)),
+    );
 }
