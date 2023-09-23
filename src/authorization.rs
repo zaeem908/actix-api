@@ -3,6 +3,7 @@ use crate::db::AppState;
 use crate::error::AppError;
 use crate::models::Users;
 use actix_web::web::Data;
+use chrono::{Duration, Utc};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
@@ -113,5 +114,51 @@ impl UserController {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ForgotPassword {
+    pub email: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenPayload {
+    pub email: String,
+    pub exp: i64,
+}
+
+impl ForgotPassword {
+    pub async fn forgot_password(&self, db: &Pool<Postgres>) -> Result<(), AppError> {
+        let query = sqlx::query!("SELECT * FROM users WHERE email = $1", &self.email)
+            .fetch_all(db)
+            .await;
+
+        match query {
+            Ok(rows) => {
+                if rows.is_empty() {
+                    Err(AppError::InvalidEmail(
+                        "no user found with this email".to_string(),
+                    ))
+                } else {
+                    let secret_key = std::env::var("SECRET_KEY").expect("SECRET_KEY must be set");
+
+                    let token = encode(
+                        &Header::default(),
+                        &TokenPayload {
+                            email: self.email.to_string(),
+                            exp: (Utc::now() + Duration::minutes(10)).timestamp(),
+                        },
+                        &EncodingKey::from_secret(secret_key.as_ref()),
+                    );
+                    println!("Generated token: {:?}", token);
+                    Ok(())
+                }
+            }
+            Err(err) => {
+                eprintln!("Database error: {:?}", err);
+                Err(AppError::InternalServerError)
+            }
+        }
     }
 }
