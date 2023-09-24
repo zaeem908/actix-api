@@ -10,4 +10,10 @@ pub enum AppError {
 
     #[error("Internal server error")]
     InternalServerError,
+
+    #[error("Invalid Token")]
+    InvalidToken,
+
+    #[error("Expired Token")]
+    ExpiredToken,
 }

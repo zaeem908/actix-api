@@ -4,7 +4,7 @@ use crate::error::AppError;
 use crate::models::Users;
 use actix_web::web::Data;
 use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, EncodingKey, Header};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 
@@ -159,6 +159,61 @@ impl ForgotPassword {
                 eprintln!("Database error: {:?}", err);
                 Err(AppError::InternalServerError)
             }
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResetTokenPayload {
+    pub email: String,
+    pub exp: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResetPassword {
+    pub token: String,
+    pub new_password: String,
+}
+
+impl ResetPassword {
+    pub async fn reset_password(&self, db: &Pool<Postgres>) -> Result<(), AppError> {
+        let secret_key = std::env::var("SECRET_KEY").expect("SECRET_KEY must be set");
+        let decoding_key = DecodingKey::from_secret(secret_key.as_ref());
+        let validation = Validation::default();
+        let token_data = decode::<ResetTokenPayload>(&self.token, &decoding_key, &validation);
+
+        match token_data {
+            Ok(decoded) => {
+                if Utc::now().timestamp() > decoded.claims.exp {
+                    return Err(AppError::ExpiredToken);
+                }
+
+                let email = &decoded.claims.email;
+                let hashed_password_result = hash_password(&self.new_password);
+                let hashed_password = match hashed_password_result {
+                    Ok(hashed) => hashed,
+                    Err(_) => {
+                        eprintln!("Failed to hash password");
+                        return Err(AppError::InternalServerError);
+                    }
+                };
+                let result = sqlx::query!(
+                    "UPDATE users SET password = $1 WHERE email = $2",
+                    &hashed_password,
+                    email
+                )
+                .execute(db)
+                .await;
+
+                match result {
+                    Ok(_) => Ok(()),
+                    Err(err) => {
+                        eprintln!("Database error: {:?}", err);
+                        Err(AppError::InternalServerError)
+                    }
+                }
+            }
+            Err(_) => Err(AppError::InvalidToken),
         }
     }
 }

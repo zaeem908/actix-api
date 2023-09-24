@@ -1,5 +1,5 @@
 use crate::auth::UserDataStruct;
-use crate::authorization::{ForgotPassword, LoginForm, UserController};
+use crate::authorization::{ForgotPassword, LoginForm, ResetPassword, UserController};
 use crate::db::AppState;
 use actix_web::web;
 use actix_web::web::Data;
@@ -26,6 +26,21 @@ pub async fn forgot_password_handler(
 
     match result {
         Ok(()) => HttpResponse::Ok().json("password reset key sent to your email".to_string()),
+        Err(err) => {
+            eprintln!("Database error: {:?}", err);
+            HttpResponse::InternalServerError().json("Internal Server Error")
+        }
+    }
+}
+pub async fn reset_password_handler(
+    form: web::Json<ResetPassword>,
+    state: Data<AppState>,
+) -> HttpResponse {
+    let db = &state.db;
+    let result = form.reset_password(&db).await;
+
+    match result {
+        Ok(()) => HttpResponse::Ok().json("password reset successful".to_string()),
         Err(err) => {
             eprintln!("Database error: {:?}", err);
             HttpResponse::InternalServerError().json("Internal Server Error")
@@ -64,6 +79,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route("/", web::get().to(fetch_users_handler))
             .route("/", web::post().to(create_user_handler))
             .route("/login", web::post().to(login_handler))
-            .route("/forgot-password", web::post().to(forgot_password_handler)),
+            .route("/forgot-password", web::post().to(forgot_password_handler))
+            .route("/reset-password", web::post().to(reset_password_handler)),
     );
 }
