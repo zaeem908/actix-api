@@ -2,7 +2,7 @@ use crate::auth::{hash_password, UserDataStruct};
 use crate::db::AppState;
 use crate::error::AppError;
 use crate::models::Users;
-use actix_web::web::Data;
+use actix_web::web::{self, Data};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
@@ -214,6 +214,56 @@ impl ResetPassword {
                 }
             }
             Err(_) => Err(AppError::InvalidToken),
+        }
+    }
+}
+
+////////////////////////////////////////jdcjdj
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewUserProfile {
+    pub age: i32,
+    pub weight: f64,
+    pub height: f64,
+    pub goal_physique_id: i32,
+}
+
+impl NewUserProfile {
+    pub async fn create_user_profile(
+        &self,
+        path: web::Path<(i32,)>,
+        db: &Pool<Postgres>, // Database connection pool
+    ) -> Result<(), AppError> {
+        let user_id = path.0;
+
+        // Check if the user already exists, if not, insert a new profile
+        let user_exists = sqlx::query!("SELECT * FROM user_profiles WHERE user_id = $1", user_id)
+            .fetch_optional(db)
+            .await;
+
+        let _ = match user_exists {
+            Ok(_) => Ok(()),
+            Err(err) => Err(AppError::InvalidEmail(err.to_string())),
+        };
+
+        // Insert the new user profile
+        let result = sqlx::query!(
+        "INSERT INTO user_profiles (user_id, age, weight, height, dream_physique_id) VALUES ($1, $2, $3, $4, $5)",
+        user_id,
+        self.age,
+        self.weight,
+        self.height,
+        self.goal_physique_id,
+    )
+    .execute(db)
+    .await;
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                eprintln!("Database error: {:?}", err);
+                Err(AppError::InternalServerError)
+            }
         }
     }
 }
