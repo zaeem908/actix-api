@@ -14,6 +14,9 @@ pub enum AppError {
     #[error("Invalid Token")]
     InvalidToken,
 
+    #[error("Apready Exists!: {0}")]
+    AlreadyExists(String),
+
     #[error("Expired Token")]
     ExpiredToken,
 }

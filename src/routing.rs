@@ -1,6 +1,6 @@
 use crate::auth::UserDataStruct;
 use crate::authorization::{
-    ForgotPassword, LoginForm, NewUserProfile, ResetPassword, UserController,
+    ForgotPassword, LoginForm, NewUserProfile, ResetPassword, UserController, WorkoutPlan,
 };
 use crate::db::AppState;
 use actix_web::web;
@@ -66,6 +66,24 @@ pub async fn create_user_profile_handler(
         }
     }
 }
+
+pub async fn create_workout_plan_handler(
+    form: web::Json<WorkoutPlan>,
+    path: web::Path<(i32,)>,
+    state: Data<AppState>,
+) -> HttpResponse {
+    let db = &state.db;
+    let result = form.create_workout_plan(path, &db).await;
+
+    match result {
+        Ok(()) => HttpResponse::Ok().json("workout plan created succesfully".to_string()),
+        Err(err) => {
+            eprintln!("Database error: {:?}", err);
+            HttpResponse::InternalServerError().json("Internal Server Error")
+        }
+    }
+}
+
 pub async fn fetch_users_handler(data: Data<AppState>) -> HttpResponse {
     match UserController::fetch_users(data).await {
         Ok(x) => HttpResponse::Ok().json(x),
@@ -102,6 +120,10 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route(
                 "/create-user-profile/{id}",
                 web::post().to(create_user_profile_handler),
+            )
+            .route(
+                "/create-workout_plan/{id}",
+                web::post().to(create_workout_plan_handler),
             ),
     );
 }

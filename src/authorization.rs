@@ -218,8 +218,6 @@ impl ResetPassword {
     }
 }
 
-////////////////////////////////////////jdcjdj
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewUserProfile {
     pub age: i32,
@@ -232,11 +230,11 @@ impl NewUserProfile {
     pub async fn create_user_profile(
         &self,
         path: web::Path<(i32,)>,
-        db: &Pool<Postgres>, // Database connection pool
+        db: &Pool<Postgres>,
     ) -> Result<(), AppError> {
         let user_id = path.0;
 
-        // Check if the user already exists, if not, insert a new profile
+        // Checking if the user already exists, if not, insert a new profile
         let user_exists = sqlx::query!("SELECT * FROM user_profiles WHERE user_id = $1", user_id)
             .fetch_optional(db)
             .await;
@@ -246,7 +244,6 @@ impl NewUserProfile {
             Err(err) => Err(AppError::InvalidEmail(err.to_string())),
         };
 
-        // Insert the new user profile
         let result = sqlx::query!(
         "INSERT INTO user_profiles (user_id, age, weight, height, dream_physique_id) VALUES ($1, $2, $3, $4, $5)",
         user_id,
@@ -254,6 +251,60 @@ impl NewUserProfile {
         self.weight,
         self.height,
         self.goal_physique_id,
+    )
+    .execute(db)
+    .await;
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                eprintln!("Database error: {:?}", err);
+                Err(AppError::InternalServerError)
+            }
+        }
+    }
+}
+
+// //////////////ffjfjfj
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WorkoutPlan {
+    pub user_id: i32,
+    pub name: String,
+    pub description: String,
+    pub start_date: String,
+    pub end_date: String,
+    pub physique_type_id: i32,
+    pub difficulty_level_id: i32,
+}
+
+impl WorkoutPlan {
+    pub async fn create_workout_plan(
+        &self,
+        path: web::Path<(i32,)>,
+        db: &Pool<Postgres>,
+    ) -> Result<(), AppError> {
+        let user_id = path.0;
+
+        // Checking if the user already exists, if not, insert a new profile
+        let user_exists = sqlx::query!("SELECT * FROM workout_plans WHERE user_id = $1", user_id)
+            .fetch_optional(db)
+            .await;
+
+        let _ = match user_exists {
+            Ok(_) => Ok(()),
+            Err(err) => Err(AppError::AlreadyExists(err.to_string())),
+        };
+
+        let result = sqlx::query!(
+        "INSERT INTO workout_plans (user_id, name, description, start_date, end_date, physique_type_id, difficulty_level_id) VALUES ($1, $2, $3, $4, $5, $6 , $7)",
+        user_id,
+        self.name,
+        self.description,
+        self.start_date,
+        self.end_date,
+        self.physique_type_id,
+        self.difficulty_level_id,
     )
     .execute(db)
     .await;
