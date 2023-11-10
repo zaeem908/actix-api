@@ -224,6 +224,7 @@ pub struct NewUserProfile {
     pub weight: f64,
     pub height: f64,
     pub goal_physique_id: i32,
+    pub difficulty: i32,
 }
 
 impl NewUserProfile {
@@ -234,7 +235,6 @@ impl NewUserProfile {
     ) -> Result<(), AppError> {
         let user_id = path.0;
 
-        // Checking if the user already exists, if not, insert a new profile
         let user_exists = sqlx::query!("SELECT * FROM user_profiles WHERE user_id = $1", user_id)
             .fetch_optional(db)
             .await;
@@ -245,12 +245,13 @@ impl NewUserProfile {
         };
 
         let result = sqlx::query!(
-        "INSERT INTO user_profiles (user_id, age, weight, height, dream_physique_id) VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO user_profiles (user_id, age, weight, height, goal_physique_id, difficulty) VALUES ($1, $2, $3, $4, $5, $6)",
         user_id,
         self.age,
         self.weight,
         self.height,
         self.goal_physique_id,
+        self.difficulty
     )
     .execute(db)
     .await;
@@ -265,55 +266,84 @@ impl NewUserProfile {
     }
 }
 
-// //////////////ffjfjfj
-
 #[derive(Debug, Serialize, Deserialize)]
-pub struct WorkoutPlan {
-    pub user_id: i32,
-    pub name: String,
-    pub description: String,
-    pub start_date: String,
-    pub end_date: String,
-    pub physique_type_id: i32,
+pub struct NewUserPlan {
+    pub goal_physique_id: i32,
     pub difficulty_level_id: i32,
 }
 
-impl WorkoutPlan {
-    pub async fn create_workout_plan(
+impl NewUserPlan {
+    pub async fn create_user_plan(
         &self,
-        path: web::Path<(i32,)>,
+        user_id: i32,
         db: &Pool<Postgres>,
     ) -> Result<(), AppError> {
-        let user_id = path.0;
-
-        // Checking if the user already exists, if not, insert a new profile
-        let user_exists = sqlx::query!("SELECT * FROM workout_plans WHERE user_id = $1", user_id)
-            .fetch_optional(db)
-            .await;
-
-        let _ = match user_exists {
-            Ok(_) => Ok(()),
-            Err(err) => Err(AppError::AlreadyExists(err.to_string())),
-        };
-
         let result = sqlx::query!(
-        "INSERT INTO workout_plans (user_id, name, description, start_date, end_date, physique_type_id, difficulty_level_id) VALUES ($1, $2, $3, $4, $5, $6 , $7)",
-        user_id,
-        self.name,
-        self.description,
-        self.start_date,
-        self.end_date,
-        self.physique_type_id,
-        self.difficulty_level_id,
-    )
-    .execute(db)
-    .await;
+            "INSERT INTO user_plans (user_id, goal_physique_id, difficulty_level_id) VALUES ($1, $2, $3)",
+            user_id,
+            self.goal_physique_id,
+            self.difficulty_level_id
+        )
+        .execute(db)
+        .await;
 
         match result {
             Ok(_) => Ok(()),
             Err(err) => {
                 eprintln!("Database error: {:?}", err);
                 Err(AppError::InternalServerError)
+            }
+        }
+    }
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Exercises {
+    exercise_id: Option<i32>,
+    name:Option<String>,
+    sets: Option<i32>,
+    reps: Option<i32>,
+    weight: Option<i32>,
+    duration_minutes: Option<i32>,
+    rest_seconds: Option<i32>,
+    notes: Option<String>,
+    difficulty_level_id: Option<i32>,
+}
+impl Exercises {
+    pub async fn fetch_exercises(
+        path: web::Path<(i32,)>,
+        db: &Pool<Postgres>,
+    ) -> Result<Vec<Exercises>, String> {
+        let user_id = path.0;
+
+        let user_plan_query = sqlx::query!(
+            "SELECT difficulty_level_id FROM user_plans WHERE user_id = $1",
+            user_id
+        )
+        .fetch_one(db)
+        .await;
+
+        match user_plan_query {
+            Ok(user_plan) => {
+                let difficulty_level_id = user_plan.difficulty_level_id.unwrap_or_default();
+
+                let exercises_query = sqlx::query!(
+                    "SELECT * FROM exercises WHERE difficulty_level_id = $1",
+                    difficulty_level_id
+                )
+                .fetch_all(db)
+                .await;
+
+                match exercises_query {
+                    Ok(exercises) => Ok(exercises),
+                    Err(err) => {
+                        eprintln!("Error fetching exercises: {:?}", err);
+                        Err("Internal Server Error".to_string())
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("Error fetching user plan: {:?}", err);
+                Err("Internal Server Error".to_string())
             }
         }
     }
