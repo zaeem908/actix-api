@@ -23,7 +23,6 @@ pub async fn fetch_users_handler(data: Data<AppState>) -> HttpResponse {
     }
 }
 
-
 pub async fn create_user_handler(
     user_data: actix_web::web::Json<UserDataStruct>,
     data: Data<AppState>,
@@ -116,7 +115,6 @@ pub async fn create_user_plan_handler(
     }
 }
 
-
 pub async fn fetch_exercises_handler(
     path: web::Path<(i32,)>,
     state: Data<AppState>,
@@ -131,7 +129,6 @@ pub async fn fetch_exercises_handler(
         }
     }
 }
-
 
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(

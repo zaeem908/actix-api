@@ -299,7 +299,7 @@ impl NewUserPlan {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Exercises {
     exercise_id: Option<i32>,
-    name:Option<String>,
+    name: Option<String>,
     sets: Option<i32>,
     reps: Option<i32>,
     weight: Option<i32>,
